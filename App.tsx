@@ -3,7 +3,51 @@ import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Clipboard, Alert 
 import { CameraView, useCameraPermissions, CameraType } from 'expo-camera';
 import { Audio } from 'expo-av';
 import { Asset } from 'expo-asset';
+import Animated, {
+  useSharedValue,
+  withTiming,
+  useAnimatedStyle,
+  runOnJS,
+} from 'react-native-reanimated';
 
+// --- AnimatedListItem component ---
+const AnimatedListItem = ({ item, onDelete, onCopy }: {
+  item: string;
+  onDelete: () => void;
+  onCopy: () => void;
+}) => {
+  const opacity = useSharedValue(0);
+  const translateY = useSharedValue(20);
+  const height = useSharedValue(70); // approximate item height
+
+  // Entry animation
+  useEffect(() => {
+    opacity.value = withTiming(1, { duration: 300 });
+    translateY.value = withTiming(0, { duration: 300 });
+  }, []);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ translateY: translateY.value }],
+    height: height.value,
+  }));
+
+  return (
+    <Animated.View style={[styles.listItemContainer, animatedStyle]}>
+      <Text style={styles.listItemText}>{item}</Text>
+      <View style={styles.buttonRow}>
+        <TouchableOpacity onPress={onCopy} style={styles.copyButton}>
+          <Text style={styles.copyButtonText}>Copy</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={onDelete} style={styles.deleteButton}>
+          <Text style={styles.deleteButtonText}>Delete</Text>
+        </TouchableOpacity>
+      </View>
+    </Animated.View>
+  );
+};
+
+// --- Main App component ---
 export default function App() {
   const [facing, setFacing] = useState<CameraType>('back');
   const [permission, requestPermission] = useCameraPermissions();
@@ -41,7 +85,7 @@ export default function App() {
 
   const handleBarcodeScanned = async (result: any) => {
     const timestamp = Date.now();
-    if (scanned || (timestamp - lastScannedTimestampRef.current < 2000)) return;
+    if (scanned || (timestamp - lastScannedTimestampRef.current < 1000)) return;
 
     lastScannedTimestampRef.current = timestamp;
     setScanned(true);
@@ -67,7 +111,6 @@ export default function App() {
     if (scannedList.length > 0) {
       const listString = scannedList.join('\n');
       Clipboard.setString(listString);
-      Alert.alert('Copied to Clipboard', 'All scanned barcodes have been copied.');
     }
   };
 
@@ -76,9 +119,10 @@ export default function App() {
   };
 
   const handleDeleteBarcode = (index: number) => {
+    const itemToDelete = scannedList[index];
     Alert.alert(
       'Confirm Delete',
-      `Are you sure you want to delete "${scannedList[index]}"?`,
+      `Are you sure you want to delete "${itemToDelete}"?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -123,6 +167,19 @@ export default function App() {
     }
   };
 
+  const handleRemoveAll = () => {
+    Alert.alert('Confirm Remove All', 'Are you sure you want to delete all items?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove All',
+        style: 'destructive',
+        onPress: () => {
+          setScannedList([]); // Clear all items from the list
+        },
+      },
+    ]);
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.cameraContainer}>
@@ -145,41 +202,36 @@ export default function App() {
       <ScrollView style={styles.listContainer}>
         {scannedList.length > 0 ? (
           scannedList.map((item, index) => (
-            <View key={index} style={styles.listItemContainer}>
-              <Text style={styles.listItemText}>{item}</Text>
-              <View style={styles.buttonRow}>
-                <TouchableOpacity
-                  onPress={() => handleCopySingleBarcode(item)}
-                  style={styles.copyButton}
-                >
-                  <Text style={styles.copyButtonText}>Copy</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => handleDeleteBarcode(index)}
-                  style={styles.deleteButton}
-                >
-                  <Text style={styles.deleteButtonText}>Delete</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
+            <AnimatedListItem
+              key={`${item}-${index}`}
+              item={item}
+              onCopy={() => handleCopySingleBarcode(item)}
+              onDelete={() => handleDeleteBarcode(index)}
+            />
           ))
         ) : (
-          <Text>No barcodes saved yet.</Text>
+          <View style={styles.emptyListMessage}>
+            <Text style={styles.noCodesScannedText}>No barcodes scanned</Text>
+          </View>
         )}
       </ScrollView>
-      {/* Buttons at the bottom */}
+
       <View style={styles.buttonContainer}>
-          <TouchableOpacity style={styles.button} onPress={handleRemoveDuplicates}>
-            <Text style={styles.buttonText}>Remove Duplicates</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.button} onPress={handleCopyToClipboard}>
-            <Text style={styles.buttonText}>Copy All</Text>
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity style={styles.button} onPress={handleRemoveDuplicates}>
+          <Text style={styles.buttonText}>Dedupe</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.button} onPress={handleRemoveAll}>
+          <Text style={styles.buttonText}>Clear</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.button} onPress={handleCopyToClipboard}>
+          <Text style={styles.buttonText}>Copy</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
 
+// --- Styles ---
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -190,7 +242,7 @@ const styles = StyleSheet.create({
   },
   cameraContainer: {
     width: '100%',
-    height: 200, // Increased height for better visibility
+    height: 150,
     borderRadius: 20,
     overflow: 'hidden',
     marginBottom: 20,
@@ -200,15 +252,11 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
   },
-  message: {
-    textAlign: 'center',
-    marginBottom: 20,
-  },
   listContainer: {
     marginTop: 20,
     width: '100%',
-    flexGrow: 1, // Allow the list to take up available space
-    marginBottom: 70, // Add space for the buttons.
+    flexGrow: 1,
+    marginBottom: 70,
   },
   listItemContainer: {
     flexDirection: 'row',
@@ -258,19 +306,35 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     width: '100%',
-    position: 'absolute', // Keep buttons at the bottom
-    bottom: 20,
-    paddingHorizontal: 20,
+    position: 'absolute',
+    bottom: 30,
+    paddingHorizontal: 0,
   },
   button: {
-    padding: 10,
+    paddingVertical: 5,
+    paddingHorizontal: 2,
     backgroundColor: '#2b2b2b',
     borderRadius: 5,
-    width: '45%',
+    flex: 1,
+    marginHorizontal: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
+    fontSize: 100,
   },
   buttonText: {
     color: 'white',
-    fontSize: 18,
+    fontSize: 22,
     textAlign: 'center',
   },
+  emptyListMessage: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    height: 100,
+  },
+  noCodesScannedText: {
+    color: 'black',
+    fontSize: 35,
+    textAlign: 'center',
+  },
+  
 });

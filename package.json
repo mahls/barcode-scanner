@@ -11,12 +11,16 @@
   "dependencies": {
     "@types/react-router": "^5.1.20",
     "expo": "~53.0.6",
+    "expo-av": "~15.1.4",
     "expo-camera": "~16.1.6",
     "expo-status-bar": "~2.2.3",
+    "moti": "^0.30.0",
     "react": "19.0.0",
     "react-native": "0.79.2",
+    "react-native-gesture-handler": "~2.24.0",
     "react-native-permissions": "^5.4.0",
-    "expo-av": "~15.1.4"
+    "react-native-reanimated": "~3.17.4",
+    "react-native-toast-message": "^2.3.0"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
